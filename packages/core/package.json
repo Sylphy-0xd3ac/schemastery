@@ -1,5 +1,5 @@
 {
-  "name": "@sylphy-0xd3ac/schemastery",
+  "name": "@syd3ac/schemastery",
   "description": "Type driven schema validator",
   "version": "3.18.0",
   "main": "lib/index.cjs",
