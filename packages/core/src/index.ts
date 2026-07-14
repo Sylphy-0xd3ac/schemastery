@@ -113,6 +113,7 @@ declare global {
     '~standard': StandardSchemaV1.Props // <S, T>
     toString(inline?: boolean): string
     toJSON(): Schema<S, T>
+    toJSONSchema(): Dict
     required(value?: boolean): Schema<S, T>
     hidden(value?: boolean): Schema<S, T>
     loose(value?: boolean): Schema<S, T>
@@ -243,6 +244,116 @@ Schema.prototype.toJSON = function toJSON() {
   const result = { uid: this.uid, refs: globalThis.__schemastery_refs__ }
   globalThis.__schemastery_refs__ = undefined
   return result
+}
+
+const roleFormats: Dict<string> = {
+  datetime: 'date-time',
+  date: 'date',
+  time: 'time',
+  url: 'uri',
+  link: 'uri',
+  email: 'email',
+}
+
+function jsonSchema(schema: Schema, path: Set<number>): Dict {
+  const meta: Schemastery.Meta = schema.meta || {}
+  const annotate = (node: Dict) => {
+    if (meta.default !== undefined) node.default = meta.default
+    if (typeof meta.description === 'string') {
+      node.description = meta.description
+    } else if (meta.description) {
+      node.description = meta.description[''] ?? Object.values(meta.description)[0]
+    }
+    if (meta.comment) node.$comment = meta.comment
+    return node
+  }
+
+  if (path.has(schema.uid)) return {}
+  path.add(schema.uid)
+  try {
+    switch (schema.type) {
+      case 'never':
+        return annotate({ not: {} })
+      case 'const':
+        return annotate({ const: schema.value })
+      case 'string': {
+        const node: Dict = { type: 'string' }
+        if (meta.pattern) node.pattern = meta.pattern.source
+        if (meta.min !== undefined) node.minLength = meta.min
+        if (meta.max !== undefined) node.maxLength = meta.max
+        const format = meta.role && roleFormats[meta.role]
+        if (format) node.format = format
+        return annotate(node)
+      }
+      case 'number': {
+        const node: Dict = { type: 'number' }
+        if (meta.min !== undefined) node.minimum = meta.min
+        if (meta.max !== undefined) node.maximum = meta.max
+        if (meta.step !== undefined) node.multipleOf = meta.step
+        return annotate(node)
+      }
+      case 'boolean':
+        return annotate({ type: 'boolean' })
+      case 'bitset':
+        return annotate({ type: ['number', 'array'] })
+      case 'array': {
+        const node: Dict = { type: 'array', items: jsonSchema(schema.inner!, path) }
+        if (meta.min !== undefined) node.minItems = meta.min
+        if (meta.max !== undefined) node.maxItems = meta.max
+        return annotate(node)
+      }
+      case 'dict':
+        return annotate({ type: 'object', additionalProperties: jsonSchema(schema.inner!, path) })
+      case 'tuple':
+        return annotate({
+          type: 'array',
+          prefixItems: schema.list!.map(inner => jsonSchema(inner, path)),
+          items: false,
+        })
+      case 'object': {
+        const properties: Dict = {}
+        const required: string[] = []
+        for (const key in schema.dict) {
+          const inner = schema.dict[key]!
+          properties[key] = jsonSchema(inner, path)
+          if (inner.meta.required) required.push(key)
+        }
+        const node: Dict = { type: 'object', properties }
+        if (required.length) node.required = required
+        return annotate(node)
+      }
+      case 'union': {
+        const items = schema.list!.map(inner => jsonSchema(inner, path))
+        const list = items.some(item => Object.keys(item).length)
+          ? items.filter(item => Object.keys(item).length)
+          : items
+        if (list.length === 1) return annotate(list[0]!)
+        if (list.every(item => 'const' in item)) {
+          return annotate({ enum: list.map(item => item.const) })
+        }
+        return annotate({ anyOf: list })
+      }
+      case 'intersect':
+        return annotate({ allOf: schema.list!.map(inner => jsonSchema(inner, path)) })
+      case 'transform':
+        return annotate(jsonSchema(schema.inner!, path))
+      case 'lazy': {
+        if (!schema.inner![kSchema]) {
+          schema.inner = schema.builder!()
+          schema.inner!.meta = { ...schema.meta, ...schema.inner!.meta }
+        }
+        return jsonSchema(schema.inner!, path)
+      }
+      default:
+        return annotate({})
+    }
+  } finally {
+    path.delete(schema.uid)
+  }
+}
+
+Schema.prototype.toJSONSchema = function toJSONSchema(this: Schema) {
+  return jsonSchema(this, new Set())
 }
 
 Schema.prototype.set = function set(key, value) {
