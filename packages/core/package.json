@@ -1,5 +1,5 @@
 {
-  "name": "schemastery",
+  "name": "@sylphy-0xd3ac/schemastery",
   "description": "Type driven schema validator",
   "version": "3.18.0",
   "main": "lib/index.cjs",
@@ -9,15 +9,18 @@
     "lib",
     "src"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shigma/schemastery.git",
+    "url": "git+https://github.com/Sylphy-0xd3ac/schemastery.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/shigma/schemastery/issues"
+    "url": "https://github.com/Sylphy-0xd3ac/schemastery/issues"
   },
-  "homepage": "https://github.com/shigma/schemastery",
+  "homepage": "https://github.com/Sylphy-0xd3ac/schemastery",
   "author": "Shigma <shigma10826@gmail.com>",
   "license": "MIT",
   "devDependencies": {
